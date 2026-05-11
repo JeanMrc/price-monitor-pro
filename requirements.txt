@@ -1,0 +1,7 @@
+selenium
+webdriver-manager
+gspread
+google-auth
+python-dotenv
+requests
+python-telegram-bot
