@@ -29,15 +29,39 @@ alerts when a price drops below your target.
 
 ---
 
+## CLI Usage
+
+Add a product to track:
+```bash
+python monitor.py add "Product Name" "https://amazon.com/..." 999.00
+```
+
+List all tracked products:
+```bash
+python monitor.py list
+```
+
+Remove a product:
+```bash
+python monitor.py remove "Product Name"
+```
+
+Start monitoring:
+```bash
+python monitor.py run
+```
+
+---
+
 ## How It Works
 
-1. Selenium launches a headless Chrome browser
-2. Loads Amazon with USD currency forced via cookie
-3. Extracts the current price using CSS selectors
-4. Logs the result to Google Sheets with timestamp
-5. Sends a Telegram alert if price is below target
-6. Waits one hour and repeats
-
+1. User adds products via CLI — stored in `products.json`
+2. Selenium launches a headless Chrome browser
+3. Loads Amazon with USD currency forced via cookie
+4. Extracts the current price using CSS selectors
+5. Logs the result to Google Sheets with timestamp
+6. Sends a Telegram alert if price is below target
+7. Waits one hour and repeats
 ---
 
 ## Setup
