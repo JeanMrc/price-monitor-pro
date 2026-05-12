@@ -1,5 +1,7 @@
 import os
 import time
+import json
+import argparse
 import requests
 from datetime import datetime
 from dotenv import load_dotenv
@@ -21,19 +23,63 @@ TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 GOOGLE_SHEET_ID  = os.getenv("GOOGLE_SHEET_ID")
 
-PRODUCTS = [
-    {
-        "name":         "ASUS ROG Flow Gaming Laptop",
-        "url":          "https://www.amazon.com/ASUS-Flow-Gaming-Laptop-Nebula/dp/B0DW238TXK/",
-        "target_price": 1500.00,
-    }
-]
+BASE_DIR      = os.path.dirname(os.path.abspath(__file__))
+PRODUCTS_FILE = os.path.join(BASE_DIR, "products.json")
+CHECK_EVERY   = 3600
 
-CHECK_EVERY = 3600
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
+
+# ─────────────────────────────────────────
+# Products File
+# ─────────────────────────────────────────
+def load_products():
+    if not os.path.exists(PRODUCTS_FILE):
+        return []
+    with open(PRODUCTS_FILE, "r") as f:
+        return json.load(f)
+
+def save_products(products):
+    with open(PRODUCTS_FILE, "w") as f:
+        json.dump(products, f, indent=4)
+
+def add_product(name, url, target_price):
+    products = load_products()
+    for p in products:
+        if p["name"].lower() == name.lower():
+            print(f"Product '{name}' already exists.")
+            return
+    products.append({
+        "name":         name,
+        "url":          url,
+        "target_price": float(target_price)
+    })
+    save_products(products)
+    print(f"Added: {name} — Target: ${target_price}")
+
+def remove_product(name):
+    products = load_products()
+    updated  = [p for p in products if p["name"].lower() != name.lower()]
+    if len(updated) == len(products):
+        print(f"Product '{name}' not found.")
+        return
+    save_products(updated)
+    print(f"Removed: {name}")
+
+def list_products():
+    products = load_products()
+    if not products:
+        print("No products tracked yet.")
+        return
+    print("\nTracked Products:")
+    print("-" * 50)
+    for i, p in enumerate(products, 1):
+        print(f"{i}. {p['name']}")
+        print(f"   URL   : {p['url']}")
+        print(f"   Target: ${p['target_price']}")
+    print("-" * 50)
 
 # ─────────────────────────────────────────
 # Google Sheets
@@ -67,18 +113,12 @@ def get_price(url):
     )
 
     try:
-        # Load Amazon first to set cookie
         driver.get("https://www.amazon.com")
         time.sleep(2)
-
-        # Force USD currency
         driver.add_cookie({"name": "i18n-prefs", "value": "USD"})
-
-        # Now load the product page
         driver.get(url)
         time.sleep(3)
 
-        
         wait = WebDriverWait(driver, 10)
 
         selectors = [
@@ -146,21 +186,27 @@ def log_to_sheets(ws, product, price, alerted):
     print(f"  Logged to Google Sheets.")
 
 # ─────────────────────────────────────────
-# Main Loop
+# Monitor Loop
 # ─────────────────────────────────────────
-def monitor():
+def run_monitor():
+    products = load_products()
+
+    if not products:
+        print("No products to monitor. Add one with --add first.")
+        return
+
     print("=" * 50)
     print("Price Monitor Pro")
-    print(f"Tracking {len(PRODUCTS)} product(s)")
+    print(f"Tracking {len(products)} product(s)")
     print(f"Checking every {CHECK_EVERY // 3600} hour(s)")
     print("=" * 50)
 
     ws      = connect_sheets()
-    alerted = {p["name"]: False for p in PRODUCTS}
+    alerted = {p["name"]: False for p in products}
 
     try:
         while True:
-            for product in PRODUCTS:
+            for product in products:
                 name  = product["name"]
                 print(f"\nChecking: {name}")
 
@@ -197,7 +243,46 @@ def monitor():
         print("=" * 50)
 
 # ─────────────────────────────────────────
+# CLI
+# ─────────────────────────────────────────
+def main():
+    parser = argparse.ArgumentParser(
+        description="Price Monitor Pro — Track Amazon prices from the command line."
+    )
+
+    subparsers = parser.add_subparsers(dest="command")
+
+    # --add
+    add_parser = subparsers.add_parser("add", help="Add a product to track")
+    add_parser.add_argument("name",         type=str,   help="Product name")
+    add_parser.add_argument("url",          type=str,   help="Amazon product URL")
+    add_parser.add_argument("target_price", type=float, help="Target price in USD")
+
+    # --remove
+    remove_parser = subparsers.add_parser("remove", help="Remove a tracked product")
+    remove_parser.add_argument("name", type=str, help="Product name to remove")
+
+    # --list
+    subparsers.add_parser("list", help="List all tracked products")
+
+    # --run
+    subparsers.add_parser("run", help="Start monitoring")
+
+    args = parser.parse_args()
+
+    if args.command == "add":
+        add_product(args.name, args.url, args.target_price)
+    elif args.command == "remove":
+        remove_product(args.name)
+    elif args.command == "list":
+        list_products()
+    elif args.command == "run":
+        run_monitor()
+    else:
+        parser.print_help()
+
+# ─────────────────────────────────────────
 # Run
 # ─────────────────────────────────────────
 if __name__ == "__main__":
-    monitor()
+    main()
